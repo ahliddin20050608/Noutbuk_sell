@@ -20,7 +20,7 @@ ENV/
 *.db
 
 # === Maxfiy fayllar (tokenlar, sozlamalar va h.k.) ===
-*.env
+.env
 config.json
 settings.json
 secret.json
