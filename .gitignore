@@ -1,0 +1,70 @@
+# === Python asosiy fayllar ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+build/
+dist/
+
+# === Virtual environment ===
+env/
+venv/
+ENV/
+.venv/
+
+# === Ma'lumotlar bazalari ===
+*.sqlite3
+*.db
+
+# === Maxfiy fayllar (tokenlar, sozlamalar va h.k.) ===
+*.env
+config.json
+settings.json
+secret.json
+
+# === Log fayllar ===
+*.log
+
+# === OS (Windows/macOS) fayllari ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === IDE (kod muharriri) fayllari ===
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# === Kesh va vaqtinchalik fayllar ===
+*.bak
+*.tmp
+*.swp
+*.lock
+
+# === Statik fayllar (agar Django yoki web interfeys bilan ishlasa) ===
+staticfiles/
+media/
+static/
+
+# === PyInstaller / packaging chiqishlari ===
+*.manifest
+*.spec
+
+# === PDFkit chiqishlari ===
+# (pdfkit generate qilgan PDF fayllar, vaqtinchalik fayllar)
+*.pdf
+pdf_output/
+temp_pdf/
+wkhtmltopdf.log
+
+# === Notebooklar (agar ishlatilsa) ===
+*.ipynb_checkpoints
+
+# === Local test yoki misol fayllar ===
+test_*.py
+example_*.py
+samples/
