@@ -68,3 +68,7 @@ wkhtmltopdf.log
 test_*.py
 example_*.py
 samples/
+
+# === Railway ===
+.railway/
+railway.json

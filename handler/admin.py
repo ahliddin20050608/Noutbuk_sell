@@ -1,8 +1,8 @@
 from aiogram import Router, F, Bot
 from aiogram.types import Message, FSInputFile
 from aiogram.filters import Command
-from database import is_admin, get_users, get_laptops, insert_laptop, get_admins, get_user_messages, get_admin_messages
-from buttons import admin_kb, cancel_kb
+from database import is_admin, get_users, get_laptops, insert_laptop, get_admins, get_user_messages, get_admin_messages, save_admin_message
+from buttons import admin_kb, cancel_kb, report_kb
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from states import AddLaptop, SendToUser
@@ -137,7 +137,7 @@ async def get_all_laptops(message: Message):
                 <td>{lap['price']}</td>
                 <td>{lap['quantity']}</td>
                 <td>{lap.get('status','-')}</td>
-                <td>{lap.get('type_','-')}</td>
+                <td>{lap.get('type','-')}</td>
             </tr>
         """
 
@@ -267,16 +267,21 @@ async def process_type(message: Message, state: FSMContext):
     if data.get("image"):
         try:
             os.makedirs("images", exist_ok=True)
-            if message.photo:
-                file_id = data.get("image")
+            # Agar image file_id bo'lsa (Telegram file_id formatida)
+            file_id = data.get("image")
+            # File_id formatini tekshirish (odatda uzun string)
+            if len(file_id) > 20 and not file_id.startswith("http"):
+                # Bu file_id, uni yuklab olish kerak
                 file = await bot.get_file(file_id)
                 local_path = f"images/{file_id}.jpg"
                 await bot.download_file(file.file_path, local_path)
                 image_path = local_path
             else:
+                # Bu URL yoki boshqa path
                 image_path = data.get("image")
         except Exception as e:
             print(f"⚠️ Rasmni saqlashda xatolik: {e}")
+            image_path = data.get("image")  # Xatolik bo'lsa ham, asl qiymatni saqlash
 
     try:
         insert_laptop(
@@ -302,15 +307,18 @@ async def process_type(message: Message, state: FSMContext):
 
 # 🔹 LeaveMessage yuborish
 @admin_router.message(F.text == "✉️ Habar qoldirish")
-async def leave_message(message: Message):
+async def leave_message(message: Message, state: FSMContext):
     await message.answer(
         "✉️ Xabaringizni yuboring. Adminlar tez orada javob beradi.",
         reply_markup=cancel_kb
     )
-    await LeaveMessage.waiting.set()
+    await state.set_state(LeaveMessage.waiting)
 
 @admin_router.message(LeaveMessage.waiting)
 async def process_leave_message(message: Message, state: FSMContext):
+    if not message.text:
+        return await message.answer("❗ Iltimos, matnli xabar yuboring.", reply_markup=cancel_kb)
+    
     admins = get_admins()
     for admin_id in admins:
         await bot.send_message(admin_id, f"📩 Yangi xabar:\n\n{message.text}\n\nFrom: {message.from_user.full_name}")
@@ -348,9 +356,11 @@ async def reply_to_user(message: Message):
 
     # Original xabar (foydalanuvchidan kelgan)
     original = message.reply_to_message
+    
+    if not original or not original.text:
+        return await message.answer("❗ Original xabardan user ID topilmadi. Matnli xabarga reply qiling.")
 
     # User ID ni topish (original xabardan)
-    import re
     match = re.search(r"ID: (\d+)", original.text)
     if not match:
         return await message.answer("❗ Original xabardan user ID topilmadi.")
@@ -367,6 +377,12 @@ async def reply_to_user(message: Message):
             chat_id=user_id,
             text=f"💬 Admin javobi:\n\n{reply_text}"
         )
+        # DB ga saqlash
+        save_admin_message(
+            admin_id=message.from_user.id,
+            user_id=user_id,
+            message_text=reply_text
+        )
         await message.answer("✅ Javob foydalanuvchiga muvaffaqiyatli yuborildi!")
     except Exception as e:
         await message.answer(f"❗ Javob yuborilmadi: {e}")
@@ -374,11 +390,20 @@ async def reply_to_user(message: Message):
 
 # 🔹 Reply qilingan xabarni foydalanuvchiga yuborish
 @admin_router.message(F.text == "📊 Hisobot")
-async def show_report(message: Message):
+async def show_report_menu(message: Message):
+    """Hisobot menyusini ko'rsatish"""
+    await message.answer(
+        "📊 Hisobot bo'limi\n\nQuyidagilardan birini tanlang:",
+        reply_markup=report_kb
+    )
+
+# 🔹 User xabarlari
+@admin_router.message(F.text == "📬 User xabarlari")
+async def show_user_messages(message: Message):
     users_messages = get_user_messages()
     
     if not users_messages:
-        await message.answer("Hech qanday xabar yo‘q 😔")
+        await message.answer("Hech qanday foydalanuvchi xabari yo'q 😔", reply_markup=report_kb)
         return
 
     html_content = """
@@ -389,7 +414,7 @@ async def show_report(message: Message):
             body { font-family: DejaVu Sans, sans-serif; margin: 20px; background: #fafafa; }
             h2 { text-align: center; color: #222; margin-bottom: 20px; }
             table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 11px; }
             th { background-color: #4CAF50; color: white; }
         </style>
     </head>
@@ -414,21 +439,110 @@ async def show_report(message: Message):
                 <td>{user_id}</td>
                 <td>{full_name}</td>
                 <td>{username}</td>
-                <td>{message_text.replace('\n','<br>')}</td>
+                <td>{message_text.replace('\n','<br>').replace('<','&lt;').replace('>','&gt;')}</td>
             </tr>
         """
 
-    html_content += "</table></body></html>"
+    html_content += """
+        </table>
+    </body>
+    </html>
+    """
 
     path_wkhtmltopdf = r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
     config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
     pdf_path = "user_messages.pdf"
     pdfkit.from_string(html_content, pdf_path, configuration=config)
 
-    await message.answer_document(FSInputFile(pdf_path), caption="📄 Foydalanuvchi xabarlari")
+    await message.answer_document(FSInputFile(pdf_path), caption="📄 Foydalanuvchi xabarlari", reply_markup=report_kb)
     
     if os.path.exists(pdf_path):
         os.remove(pdf_path)
+
+# 🔹 Admin xabarlari
+@admin_router.message(F.text == "💬 Admin xabarlari")
+async def show_admin_messages_report(message: Message):
+    from database.connect import get_connect
+    
+    admin_messages = get_admin_messages()
+    
+    if not admin_messages:
+        await message.answer("Hech qanday admin xabari yo'q 😔", reply_markup=report_kb)
+        return
+
+    html_content = """
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body { font-family: DejaVu Sans, sans-serif; margin: 20px; background: #fafafa; }
+            h2 { text-align: center; color: #222; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 11px; }
+            th { background-color: #2196F3; color: white; }
+        </style>
+    </head>
+    <body>
+        <h2>💬 Admin xabarlari</h2>
+        <table>
+            <tr>
+                <th>Admin</th>
+                <th>Foydalanuvchi</th>
+                <th>Xabar</th>
+                <th>Vaqt</th>
+            </tr>
+    """
+
+    conn = get_connect()
+    cursor = conn.cursor()
+    
+    for msg in admin_messages:
+        admin_id = msg[1]  # admin_id (chat_id)
+        user_id = msg[2]   # user_id (chat_id)
+        message_text = msg[3]
+        timestamp = msg[4]
+        
+        # Admin ismini olish
+        cursor.execute("SELECT name FROM users WHERE chat_id = ?", (admin_id,))
+        admin_result = cursor.fetchone()
+        admin_name = admin_result[0] if admin_result else f"Admin (ID: {admin_id})"
+        
+        # Foydalanuvchi ismini olish
+        cursor.execute("SELECT name FROM users WHERE chat_id = ?", (user_id,))
+        user_result = cursor.fetchone()
+        user_name = user_result[0] if user_result else f"User (ID: {user_id})"
+        
+        html_content += f"""
+            <tr>
+                <td>{admin_name}</td>
+                <td>{user_name}</td>
+                <td>{message_text.replace('\n','<br>').replace('<','&lt;').replace('>','&gt;')}</td>
+                <td>{timestamp}</td>
+            </tr>
+        """
+    
+    conn.close()
+
+    html_content += """
+        </table>
+    </body>
+    </html>
+    """
+
+    path_wkhtmltopdf = r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+    config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
+    pdf_path = "admin_messages_report.pdf"
+    pdfkit.from_string(html_content, pdf_path, configuration=config)
+
+    await message.answer_document(FSInputFile(pdf_path), caption="📄 Admin xabarlari", reply_markup=report_kb)
+    
+    if os.path.exists(pdf_path):
+        os.remove(pdf_path)
+
+# 🔹 Ortga qaytish
+@admin_router.message(F.text == "🔙 Ortga qaytish")
+async def back_to_admin_menu(message: Message):
+    await message.answer("Admin bo'limiga qaytdingiz", reply_markup=admin_kb)
 
 
 # 🔹 Admin ID kiritadi
@@ -461,6 +575,12 @@ async def send_message_to_user(message: Message, state: FSMContext):
 
     try:
         await bot.send_message(user_id, f"📩 Admindan xabar:\n\n{text}")
+        # DB ga saqlash
+        save_admin_message(
+            admin_id=message.from_user.id,
+            user_id=user_id,
+            message_text=text
+        )
         await message.answer(f"✅ Xabar {user_id} ID li foydalanuvchiga yuborildi!")
     except Exception as e:
         await message.answer(f"❌ Xabar yuborilmadi: {e}")

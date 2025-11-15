@@ -193,10 +193,15 @@ async def leave_message_start(message: Message, state: FSMContext):
     await message.answer(text=text)
 
 @user_router.message(LeaveMessage.waiting_for_message)
-async def leave_message_receive(message: Message, state: FSMContext, bot: Bot):
+async def leave_message_receive(message: Message, state: FSMContext):
     """
     Foydalanuvchi yozgan matnni qabul qilish, DB ga saqlash va adminlarga yuborish
     """
+    if not message.text:
+        return await message.answer(
+            "❗ Iltimos, matnli xabar yuboring yoki 🔙 Ortga tugmasi bilan chiqishingiz mumkin."
+        )
+    
     user_text = message.text.strip()
     
     if not user_text:

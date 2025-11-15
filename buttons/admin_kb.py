@@ -18,4 +18,10 @@ cancel_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# KeyboardButton(text="📊 Admin xabarlar"),
+report_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="💬 Admin xabarlari"), KeyboardButton(text="📬 User xabarlari")],
+        [KeyboardButton(text="🔙 Ortga qaytish")]
+    ],
+    resize_keyboard=True
+)

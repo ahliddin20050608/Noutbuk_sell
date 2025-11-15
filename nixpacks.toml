@@ -1,0 +1,16 @@
+[phases.setup]
+nixPkgs = { python = "3.11", wkhtmltopdf = "latest" }
+
+[phases.install]
+cmds = [
+  "pip install -r requirements.txt"
+]
+
+[phases.build]
+cmds = [
+  "echo 'Build completed'"
+]
+
+[start]
+cmd = "python main.py"
+
